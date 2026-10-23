@@ -25,6 +25,7 @@ class RingPipelineNode(Node):
                         display=False, display_debug=False, smooth_alpha=0.8,
                         roi_enabled=True, roi_margin_px=32, roi_full_scan_interval=15,
                         fast_enabled=True, opencv_threads=2,
+                        detector_backend='reference',
                         model_path='~/logistics_vision_data/digit_model/digits_svm.yml')
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -50,7 +51,8 @@ class RingPipelineNode(Node):
         self.pipeline = RingPipeline(validator, roi_enabled=bool(param('roi_enabled')),
                                      roi_margin_px=int(param('roi_margin_px')),
                                      roi_full_scan_interval=int(param('roi_full_scan_interval')),
-                                     fast_enabled=bool(param('fast_enabled')))
+                                     fast_enabled=bool(param('fast_enabled')),
+                                     detector_backend=str(param('detector_backend')))
         self.worker = LatestFrameWorker(self._process, self._deliver,
                                         self.pipeline.reset, self._processing_error)
         self.running = str(param('start_mode')).lower() == 'run'
@@ -65,9 +67,8 @@ class RingPipelineNode(Node):
             self.create_timer(0.03, self._show)
         if self.running:
             self.worker.start()
-        self.get_logger().info('圆环%s，OpenCV线程=%d。' %
-                               ('fast-v3：320x240候选+原图精修，稳定帧局部边缘跟踪'
-                                if self.pipeline.fast_enabled else 'roi-v2：全分辨率检圆',threads))
+        self.get_logger().info('圆环backend=%s，OpenCV线程=%d。' %
+                               (self.pipeline.detector_backend,threads))
 
     def _image(self, message):
         ingress_ns = time.monotonic_ns()

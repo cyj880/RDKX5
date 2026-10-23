@@ -216,7 +216,7 @@ class FreshnessTest(unittest.TestCase):
 
 class PipelineTest(unittest.TestCase):
     def test_confirmation_threshold_and_instant_missing_target(self):
-        node = RingPipeline()
+        node = RingPipeline(detector_backend='fast_v3')
         frame = scene()
         for _ in range(7):
             result, _, _ = node.process(frame)
@@ -233,8 +233,8 @@ class PipelineTest(unittest.TestCase):
 
     def test_static_and_moving_sequence_matches_legacy_geometry_with_less_lag(self):
         # Same real input frames and algorithms, legacy tracker/EMA coefficients.
-        optimized = RingPipeline()
-        legacy = RingPipeline(RingValidation(smooth_alpha=0.3), roi_enabled=False)
+        optimized = RingPipeline(detector_backend='fast_v3')
+        legacy = RingPipeline(detector_backend='fast_v3', validator=RingValidation(smooth_alpha=0.3), roi_enabled=False)
         legacy.tracker.track_smooth_alpha = 0.5
         old_errors, new_errors, count_pairs = [], [], []
         for shift in [0]*9 + list(range(2, 20, 2)) + [18]*4:
@@ -264,7 +264,7 @@ class PipelineTest(unittest.TestCase):
 
     def test_partial_counts_missing_model_and_positive_negative_yaw(self):
         for count in range(4):
-            pipeline = RingPipeline()
+            pipeline = RingPipeline(detector_backend='fast_v3')
             for _ in range(8):
                 result, _, _ = pipeline.process(scene(count=count))
             self.assertEqual(result['count'], count)
@@ -272,7 +272,7 @@ class PipelineTest(unittest.TestCase):
             if count in (1, 2):
                 self.assertEqual([s['id'] for s in result['sites']], [0]*count)
         for slope in (-0.08, 0.08):
-            pipeline = RingPipeline()
+            pipeline = RingPipeline(detector_backend='fast_v3')
             for _ in range(8):
                 result, _, _ = pipeline.process(scene(slope=slope))
             self.assertEqual(result['count'], 3)
@@ -305,7 +305,7 @@ class NodeInitializationTest(unittest.TestCase):
 
 class RoiSearchTest(unittest.TestCase):
     def acquire(self, pipeline=None):
-        pipeline = pipeline or RingPipeline(fast_enabled=False)
+        pipeline = pipeline or RingPipeline(detector_backend='fast_v3', fast_enabled=False)
         for _ in range(8):
             result, _, _ = pipeline.process(scene())
         self.assertEqual(result['count'], 3)
@@ -313,7 +313,7 @@ class RoiSearchTest(unittest.TestCase):
 
     def test_search_full_until_confirmed_then_crop_without_resizing(self):
         pipeline = self.acquire()
-        full_pipeline = self.acquire(RingPipeline(roi_enabled=False, fast_enabled=False))
+        full_pipeline = self.acquire(RingPipeline(detector_backend='fast_v3', roi_enabled=False, fast_enabled=False))
         frame = scene(shift=6)
         with patch('logistics_ring_v2.ring_pipeline.detect_circles', wraps=__import__(
                 'logistics_ring_v2.ring_processing', fromlist=['detect_circles']).detect_circles) as detect:
@@ -369,7 +369,7 @@ class RoiSearchTest(unittest.TestCase):
         self.assertTrue(all(abs(s['y']-360)<2 for s in result['sites']))
 
     def test_periodic_full_scan_and_reset(self):
-        pipeline = self.acquire(RingPipeline(roi_full_scan_interval=3, fast_enabled=False))
+        pipeline = self.acquire(RingPipeline(detector_backend='fast_v3', roi_full_scan_interval=3, fast_enabled=False))
         modes=[pipeline.process(scene())[0]['search_mode'] for _ in range(3)]
         self.assertEqual(modes,['roi','roi','full'])
         pipeline.reset()
@@ -378,15 +378,15 @@ class RoiSearchTest(unittest.TestCase):
         self.assertEqual((result['search_mode'],result['count']),('full',0))
 
     def test_roi_clipping_and_validation(self):
-        pipeline=RingPipeline(fast_enabled=False)
+        pipeline=RingPipeline(detector_backend='fast_v3', fast_enabled=False)
         pipeline.roi_sites=[dict(x=x,y=5,r_inner=30) for x in (5,157,309)]
         self.assertEqual(pipeline._bounds(32),(0,0,402,98))
         pipeline.roi_sites=[dict(x=x,y=475,r_inner=30) for x in (330,482,634)]
         self.assertEqual(pipeline._bounds(32),(238,383,640,480))
         with self.assertRaises(ValueError):
-            RingPipeline(roi_margin_px=-1)
+            RingPipeline(detector_backend='fast_v3', roi_margin_px=-1)
         with self.assertRaises(ValueError):
-            RingPipeline(roi_full_scan_interval=0)
+            RingPipeline(detector_backend='fast_v3', roi_full_scan_interval=0)
 
 
 if __name__ == '__main__':

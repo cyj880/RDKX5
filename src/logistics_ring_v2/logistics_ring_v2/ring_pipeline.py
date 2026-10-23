@@ -9,11 +9,14 @@ import cv2
 from .ring_geometry import circle_groups
 from .ring_processing import RingTracker, RingValidation, detect_circles
 from .ring_fast_detector import FastRingDetector
+from .reference_ring_detector import ReferenceRingDetector
 
 
 class RingPipeline:
     def __init__(self, validator=None, roi_enabled=True, roi_margin_px=32,
-                 roi_full_scan_interval=15, fast_enabled=True):
+                 roi_full_scan_interval=15, fast_enabled=True, detector_backend='reference'):
+        if detector_backend not in ('reference', 'fast_v3'):
+            raise ValueError('detector_backend must be reference or fast_v3')
         if roi_margin_px < 0 or roi_full_scan_interval < 1:
             raise ValueError('ROI margin must be >=0; full scan interval must be >=1')
         self.tracker = RingTracker()
@@ -26,6 +29,11 @@ class RingPipeline:
         self.frames_since_full = 0
         self.fast_enabled = fast_enabled
         self.fast_detector = FastRingDetector() if fast_enabled else None
+        self.detector_backend = detector_backend
+        self.reference_detector = (ReferenceRingDetector(
+            min_work_width=640, min_work_height=480, min_radius=20, max_radius=60,
+            center_merge_dist=20, radius_merge_tol=3, min_rings_per_cluster=2,
+            smooth_alpha=0.0) if detector_backend == 'reference' else None)
 
     def reset(self):
         self.tracker.tracked.clear()
@@ -33,6 +41,8 @@ class RingPipeline:
         self.validator.smoothed_sites = self.validator.smoothed_yaw = None
         self.roi_sites = None
         self.frames_since_full = 0
+        if self.reference_detector is not None:
+            self.reference_detector._prev_rings.clear()
 
     def _bounds(self, margin):
         # Include the largest permitted circle, not just the detected inner ring.
@@ -86,6 +96,24 @@ class RingPipeline:
             raise ValueError('Ring input must be 640x480 BGR')
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray_done=time.monotonic_ns()
+        if self.reference_detector is not None:
+            rings = self.reference_detector.detect(frame)
+            groups = [dict(x=float(r.center_x), y=float(r.center_y), r_inner=r.radius,
+                           coverage=r.confidence/100.0, n=1)
+                      for r in rings if (0 <= r.center_x < 640 and 0 <= r.center_y < 480)]
+            groups.sort(key=lambda g: (g['x'],g['y']))
+            detection_done=time.monotonic_ns()
+            # Like the reference: every current measured ring is eligible now.
+            # No distance association or 8-hit gate; keep fixed IDs/Yaw geometry.
+            self.validator.latest_gray=gray
+            result,rejected=self.validator.evaluate(groups)
+            result.update(search_mode='reference', detection_region=[0,0,640,480],
+                          hough_pixels=640*480, refine_pixels=0,
+                          detector_version='reference-v4',
+                          stage_ms=dict(gray=round((gray_done-begin)/1e6,3),
+                                        detection=round((detection_done-gray_done)/1e6,3),
+                                        validation=round((time.monotonic_ns()-detection_done)/1e6,3)))
+            return result,gray,rejected
         full=(0,0,640,480)
         refine_pixels=0
         if self.fast_enabled:

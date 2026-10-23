@@ -28,6 +28,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('ring_fast_enabled', default_value='true'),
+        DeclareLaunchArgument('ring_detector_backend', default_value='reference'),
         DeclareLaunchArgument('ring_opencv_threads', default_value='2'),
         DeclareLaunchArgument('ring_roi_enabled', default_value='true',
                               description='确认三环后局部检圆，false用于全图效果对比'),
@@ -70,6 +71,7 @@ def generate_launch_description():
             parameters=[{'display': display, 'display_debug': display_debug,
                          'roi_enabled': LaunchConfiguration('ring_roi_enabled'),
                          'fast_enabled': LaunchConfiguration('ring_fast_enabled'),
+                         'detector_backend': LaunchConfiguration('ring_detector_backend'),
                          'opencv_threads': LaunchConfiguration('ring_opencv_threads'),
                          'start_mode': start}],
         ),

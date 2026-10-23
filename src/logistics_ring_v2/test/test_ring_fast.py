@@ -28,7 +28,7 @@ def board(shift=0, dy=0, slope=0, count=3, style='thin'):
 
 class FastDetectorTest(unittest.TestCase):
     def acquire(self, style='disk', **kwargs):
-        pipeline=RingPipeline(**kwargs)
+        pipeline=RingPipeline(detector_backend='fast_v3', **kwargs)
         for _ in range(8):
             result,_,_=pipeline.process(board(style=style))
         self.assertEqual(result['count'],3)
@@ -89,7 +89,7 @@ class FastDetectorTest(unittest.TestCase):
 
     def test_negative_positive_yaw_original_coordinates(self):
         for slope in (-.08,.08):
-            pipeline=RingPipeline()
+            pipeline=RingPipeline(detector_backend='fast_v3')
             for _ in range(8):
                 result,_,_=pipeline.process(board(slope=slope,style='thin'))
             self.assertEqual(result['count'],3)

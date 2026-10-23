@@ -10,7 +10,8 @@ setup(
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml', 'README.md', 'RING_LATENCY_UPDATE.md']),
+        ('share/' + package_name, ['package.xml', 'README.md', 'RING_LATENCY_UPDATE.md',
+                                  'RING_REFERENCE_UPDATE.md']),
         ('share/' + package_name + '/launch', [
             'launch/ring2.launch.py', 'launch/material2.launch.py',
             'launch/vision_all.launch.py',
