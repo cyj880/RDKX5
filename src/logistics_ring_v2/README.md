@@ -1,3 +1,7 @@
+# 当前默认：640×480全图霍夫圆检测
+
+已回退默认圆环算法，串口/键盘切换修复保留。更新与重启方式见[RING_REFERENCE_UPDATE.md](RING_REFERENCE_UPDATE.md)。
+
 # 当前版本：reference-v4
 
 默认圆环识别改为参考Vision算法，取消旧8帧等待和25像素关联门槛。

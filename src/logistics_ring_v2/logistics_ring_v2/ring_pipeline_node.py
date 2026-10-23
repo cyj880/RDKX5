@@ -25,7 +25,7 @@ class RingPipelineNode(Node):
                         display=False, display_debug=False, smooth_alpha=0.8,
                         roi_enabled=True, roi_margin_px=32, roi_full_scan_interval=15,
                         fast_enabled=True, opencv_threads=2,
-                        detector_backend='reference',
+                        detector_backend='hough',
                         model_path='~/logistics_vision_data/digit_model/digits_svm.yml')
         for name, value in defaults.items():
             self.declare_parameter(name, value)

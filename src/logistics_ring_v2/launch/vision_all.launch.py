@@ -26,7 +26,7 @@ def generate_launch_description():
         DeclareLaunchArgument('start_mode', default_value='raw'),
         DeclareLaunchArgument('ring_roi_enabled', default_value='true'),
         DeclareLaunchArgument('ring_fast_enabled', default_value='true'),
-        DeclareLaunchArgument('ring_detector_backend', default_value='reference'),
+        DeclareLaunchArgument('ring_detector_backend', default_value='hough'),
         DeclareLaunchArgument('ring_opencv_threads', default_value='2'),
         DeclareLaunchArgument('start_material_mode', default_value='idle'),
         DeclareLaunchArgument('start_ring_mode', default_value='stop'),

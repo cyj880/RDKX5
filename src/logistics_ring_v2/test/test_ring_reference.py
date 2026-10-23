@@ -26,7 +26,7 @@ def rings(count=3, shift=0, slope=0, arc=360, hollow=True):
 
 class ReferenceRingTest(unittest.TestCase):
     def test_default_native_size_and_first_frame_full_result(self):
-        pipeline=RingPipeline()
+        pipeline=RingPipeline(detector_backend='reference')
         frame=rings()
         work,scale=pipeline.reference_detector._prepare(frame)
         self.assertIs(work,frame)
@@ -41,7 +41,7 @@ class ReferenceRingTest(unittest.TestCase):
         self.assertEqual(pipeline.tracker.tracked,[]) # never enters old association path
 
     def test_large_move_does_not_restart_confirmation(self):
-        pipeline=RingPipeline()
+        pipeline=RingPipeline(detector_backend='reference')
         a,_,_=pipeline.process(rings())
         b,_,_=pipeline.process(rings(shift=40))
         self.assertEqual((a['count'],b['count']),(3,3))
@@ -49,7 +49,7 @@ class ReferenceRingTest(unittest.TestCase):
         self.assertEqual([g['id'] for g in b['sites']],[1,2,3])
 
     def test_partial_ids_missing_model_and_disappearance(self):
-        pipeline=RingPipeline()
+        pipeline=RingPipeline(detector_backend='reference')
         for count in (3,2,1,0):
             result,_,_=pipeline.process(rings(count=count))
             self.assertEqual(result['count'],count)
@@ -59,7 +59,7 @@ class ReferenceRingTest(unittest.TestCase):
 
     def test_yaw_sign_and_wire_format_preserved(self):
         for slope in (-.08,.08):
-            pipeline=RingPipeline()
+            pipeline=RingPipeline(detector_backend='reference')
             result,_,_=pipeline.process(rings(slope=slope))
             self.assertEqual(result['count'],3)
             self.assertLess(abs(result['station_yaw_deg']-np.degrees(np.arctan(slope))),1)
@@ -78,7 +78,7 @@ class ReferenceRingTest(unittest.TestCase):
         self.assertEqual(detector.detect(rings(hollow=False)),[])
 
     def test_same_reference_defaults_for_hough_and_perspective_gate(self):
-        detector=RingPipeline().reference_detector
+        detector=RingPipeline(detector_backend='reference').reference_detector
         self.assertEqual((detector.hough_dp,detector.hough_param2,detector.hollow_threshold),(1.5,.8,15))
         self.assertEqual(detector.smooth_alpha,0)
         self.assertTrue(detector.refine_center)
@@ -88,7 +88,7 @@ class ReferenceRingTest(unittest.TestCase):
         self.assertIsNotNone(detector._fit_ellipse_center(gray,300,200,42))
 
     def test_geometry_and_partial_digit_rules_remain(self):
-        pipeline=RingPipeline()
+        pipeline=RingPipeline(detector_backend='reference')
         # Reference's ring_no=1 is never used as a fixed station identity.
         measured=[Ring(1,100,200,90,30),Ring(1,252,200,90,30)]
         pipeline.validator._recognize_identity=Mock(side_effect=[(2,.9),(3,.9)])
@@ -100,20 +100,30 @@ class ReferenceRingTest(unittest.TestCase):
             result,_,_=pipeline.process(rings())
         self.assertEqual(result['count'],0)
 
-    def test_node_uses_reference_and_reset_discards_smoothing(self):
-        import rclpy
-        rclpy.init()
-        node=RingPipelineNode()
-        try:
-            self.assertEqual(node.pipeline.detector_backend,'reference')
-            node.pipeline.process(rings())
-            self.assertIsNotNone(node.pipeline.validator.smoothed_sites)
-            node.pipeline.reset()
-            self.assertIsNone(node.pipeline.validator.smoothed_sites)
-            self.assertEqual(node.pipeline.reference_detector._prev_rings,[])
-        finally:
-            node.destroy_node()
-            rclpy.shutdown()
+    def test_reference_reset_discards_smoothing(self):
+        pipeline=RingPipeline(detector_backend='reference')
+        pipeline.process(rings())
+        self.assertIsNotNone(pipeline.validator.smoothed_sites)
+        pipeline.reset()
+        self.assertIsNone(pipeline.validator.smoothed_sites)
+        self.assertEqual(pipeline.reference_detector._prev_rings,[])
+
+    def test_default_restores_full_resolution_hough(self):
+        from test_ring_latency import scene
+        pipeline=RingPipeline()
+        self.assertEqual(pipeline.detector_backend,'hough')
+        self.assertFalse(pipeline.fast_enabled)
+        self.assertFalse(pipeline.roi_enabled)
+        self.assertIsNone(pipeline.reference_detector)
+        with patch('logistics_ring_v2.ring_pipeline.detect_circles', wraps=__import__(
+                'logistics_ring_v2.ring_processing',fromlist=['detect_circles']).detect_circles) as detect:
+            for _ in range(9):
+                result,_,_=pipeline.process(scene())
+        self.assertEqual(result['count'],3)
+        self.assertEqual(result['detector_version'],'hough-restored')
+        self.assertEqual(result['search_mode'],'full')
+        self.assertEqual(result['hough_pixels'],640*480)
+        self.assertTrue(all(c.args[0].shape==(480,640) for c in detect.call_args_list))
 
     def test_invalid_backend_is_rejected(self):
         with self.assertRaises(ValueError):

@@ -293,6 +293,7 @@ class NodeInitializationTest(unittest.TestCase):
                     if cls is RingPipelineNode:
                         self.assertEqual(node.pipeline.validator.smooth_alpha, 0.8)
                         self.assertEqual(node.pipeline.tracker.track_smooth_alpha, 1.0)
+                        self.assertEqual(node.pipeline.detector_backend, 'hough')
                     elif cls is ValidateNode:
                         self.assertEqual(node.smooth_alpha, 0.3)
                     else:

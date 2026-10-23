@@ -1,3 +1,37 @@
+# 回退：全分辨率霍夫圆检测
+
+当前默认后端为`hough`：640×480灰度→高斯模糊→CLAHE→全图霍夫圆→后验覆盖筛选→8次命中确认→三环几何校验。
+默认停用参考Vision算法、半分辨率候选检测和局部跟踪；不恢复旧六节点串联，以保留同帧处理和最新帧防积压。
+最终坐标单层平滑alpha=0.8、编号/Yaw、0x13协议、30Hz圆环回传上限沿用当前版本。
+串口/键盘模式门控修复保留，相机与其他识别模式、STM32源代码不修改。
+
+## 更新
+
+将`RDK_hough_restored_update.zip`中的logistics_ring_v2替换到现有X5工作区src目录，先在工作区外备份旧包。
+Git用户在仓库中执行`git pull --ff-only`。然后在工作区根目录编译：
+
+```bash
+colcon build --packages-select logistics_ring_v2 --symlink-install
+```
+
+你使用开机自启动：编译后重启X5，确保旧进程退出并加载新版。无需烧录STM32。
+如果手动启动，先停止自启动进程，再执行：
+
+```bash
+source install/setup.bash
+ros2 launch logistics_ring_v2 vision_all.launch.py ring_detector_backend:=hough display:=true
+```
+
+若自启动脚本曾显式填写`ring_detector_backend:=reference`或`fast_v3`，需要改成`hough`或删除这个覆盖参数。
+启动日志应显示`backend=hough`；切换识别后画面应显示`MODE: RING / GATE: RUN`。
+结果JSON有`detector_version: hough-restored`、`search_mode: full`，每帧检圆像素为307200。
+仍停在RAW/STOP属于模式链路问题，不能据此判断霍夫检圆失败。
+
+76项本地测试通过，包含原分辨率检圆、固定ID/Yaw、过期保护、串口和键盘模式切换；ROS接口为替身，未在X5运行或验证帧率。
+先前参考版文档和可选后端保留供回退排查，以本说明与当前默认后端为准。
+
+---
+
 # 参考圆环检测版 reference-v4
 
 ## 串口/键盘收到命令但仍停在RAW的补充修复

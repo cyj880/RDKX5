@@ -14,9 +14,12 @@ from .reference_ring_detector import ReferenceRingDetector
 
 class RingPipeline:
     def __init__(self, validator=None, roi_enabled=True, roi_margin_px=32,
-                 roi_full_scan_interval=15, fast_enabled=True, detector_backend='reference'):
-        if detector_backend not in ('reference', 'fast_v3'):
-            raise ValueError('detector_backend must be reference or fast_v3')
+                 roi_full_scan_interval=15, fast_enabled=True, detector_backend='hough'):
+        if detector_backend not in ('hough', 'reference', 'fast_v3'):
+            raise ValueError('detector_backend must be hough, reference or fast_v3')
+        if detector_backend == 'hough':
+            fast_enabled = False
+            roi_enabled = False
         if roi_margin_px < 0 or roi_full_scan_interval < 1:
             raise ValueError('ROI margin must be >=0; full scan interval must be >=1')
         self.tracker = RingTracker()
@@ -148,7 +151,9 @@ class RingPipeline:
         chosen, _, _ = self.validator._select(confirmed)
         self.roi_sites = [dict(g) for g in chosen] if result['status'] == 'full' else None
         result.update(search_mode=mode, detection_region=list(bounds), hough_pixels=pixels,
-                      refine_pixels=refine_pixels, detector_version='fast-v3' if self.fast_enabled else 'roi-v2')
+                      refine_pixels=refine_pixels,
+                      detector_version=('hough-restored' if self.detector_backend == 'hough' else
+                                        'fast-v3' if self.fast_enabled else 'roi-v2'))
         result['stage_ms']=dict(gray=round((gray_done-begin)/1e6,3),
                                 detection=round((detection_done-gray_done)/1e6,3),
                                 validation=round((time.monotonic_ns()-detection_done)/1e6,3))
