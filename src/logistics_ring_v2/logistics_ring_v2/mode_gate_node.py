@@ -64,9 +64,10 @@ class ModeGateNode(Node):
         self.timer = self.create_timer(0.2, self._startup)
 
     def _startup(self):
-        # Wait for every detector subscriber before opening any gate.
-        if all(pub.get_subscription_count() >= (6 if mode == 'ring' else 1)
-               for mode, pub in self.gate_publishers.items()):
+        # The fused ring pipeline has one command subscriber, like other modes.
+        # Waiting for the former six-stage chain leaves every mode pending forever.
+        if all(pub.get_subscription_count() >= 1
+               for pub in self.gate_publishers.values()):
             self.timer.cancel()
             self.ready = True
             command = self.pending_command
