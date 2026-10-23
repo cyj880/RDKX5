@@ -14,6 +14,8 @@ turntable / stacked 五个并列检测门(物料按"逐个识别→逐个抓取"
 旧话题入口(/vision/ring2/command 等)继续兼容, 经同样路由。
 """
 
+import time
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -61,18 +63,33 @@ class ModeGateNode(Node):
                                      lambda msg, source=mode: self._legacy(source, msg), 10)
         self.ready = False
         self.pending_command = self.start_command
+        self.pending_selection = None
+        self.next_wait_log = 0.0
         self.timer = self.create_timer(0.2, self._startup)
+        self.get_logger().info('模式控制按目标节点就绪状态切换，源码=%s。' % __file__)
 
     def _startup(self):
-        # The fused ring pipeline has one command subscriber, like other modes.
-        # Waiting for the former six-stage chain leaves every mode pending forever.
-        if all(pub.get_subscription_count() >= 1
-               for pub in self.gate_publishers.values()):
-            self.timer.cancel()
+        # Initialize raw/stop immediately. An unrelated missing detector must
+        # never prevent keyboard or serial commands from reaching a healthy one.
+        if not self.ready:
             self.ready = True
             command = self.pending_command
             self.pending_command = ''
             self._command(String(data=command))
+        elif self.pending_selection is not None:
+            mode, command = self.pending_selection
+            if self.gate_publishers[mode].get_subscription_count() >= 1:
+                self._select(mode, command)
+            else:
+                self._log_waiting(mode)
+
+    def _log_waiting(self, mode):
+        now = time.monotonic()
+        if now >= self.next_wait_log:
+            self.get_logger().warning(
+                '模式%s等待目标节点：/vision/gated/%s/command 订阅者为0。'
+                '请检查该节点是否启动失败；其他模式不受影响。' % (mode, mode))
+            self.next_wait_log = now + 5.0
 
     def _valid_mode_tokens(self, tokens) -> bool:
         """未就绪期的命令白名单校验: 合法才缓存, 防止垃圾命令抢占启动命令。"""
@@ -138,7 +155,8 @@ class ModeGateNode(Node):
         if source != 'material':
             if command == 'run':
                 self._select(source, command)
-            elif command == 'stop' and self.active == source:
+            elif command == 'stop' and (self.active == source or
+                    (self.pending_selection and self.pending_selection[0] == source)):
                 self._select('raw')
             return
         self._route_material(command.split())
@@ -174,6 +192,14 @@ class ModeGateNode(Node):
         return False
 
     def _select(self, mode, command=None):
+        if mode != 'raw' and self.gate_publishers[mode].get_subscription_count() < 1:
+            # Close the current gate first, then retry only this requested gate.
+            self._select('raw')
+            self.pending_selection = (mode, command)
+            self.next_wait_log = 0.0
+            self._log_waiting(mode)
+            return
+        self.pending_selection = None
         self.active = mode
         # 与 __init__ 的 self.commands 保持同一份键集(新增模式两处都要改)
         self.commands = {'ring': 'stop', 'material_all': 'stop',

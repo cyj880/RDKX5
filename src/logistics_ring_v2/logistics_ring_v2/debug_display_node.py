@@ -53,7 +53,7 @@ class DebugDisplayNode(Node):
         self.create_subscription(String, '/vision/stacked/results',
                                  lambda msg: self._result('stacked', msg), 10)
         self.timer = self.create_timer(0.03, self._refresh)
-        self.get_logger().info('统一调试窗口已启动，当前显示 raw。')
+        self.get_logger().info('统一调试窗口已启动，当前显示 raw，源码=%s。' % __file__)
 
     def _mode(self, message: String) -> None:
         source = message.data
@@ -62,6 +62,11 @@ class DebugDisplayNode(Node):
         if self.image_subscription is not None:
             self.destroy_subscription(self.image_subscription)
         self.active = source
+        pending = getattr(self, 'pending_command', None)
+        expected = 'material_track' if pending and pending.startswith('material track ') else pending
+        if source == expected:
+            self.pending_command = None
+            self.request_time = None
         self.frames.clear()
         self.results.clear()
         self.pending_image = None
@@ -110,6 +115,8 @@ class DebugDisplayNode(Node):
         result = self.results.get(self.active, {})
         gate = self.gates.get(self.active, 'idle')
         lines = ['MODE: %s   GATE: %s' % (self.active.upper(), str(gate).upper())]
+        if getattr(self, 'pending_command', None) and time.monotonic() - self.request_time > 1.0:
+            lines.append('REQUEST: %s - WAITING FOR MODE GATE' % self.pending_command.upper())
         if self.active == 'turntable':
             lines.append('DETECTED: %s  STABLE: %s' % (result.get('detected', False), result.get('stable', False)))
             lines.append('CENTER: (%s, %s)' % (result.get('center_u', '--'), result.get('center_v', '--')))
@@ -151,10 +158,12 @@ class DebugDisplayNode(Node):
             modes = {'i': 'raw', 'r': 'ring', 'm': 'material_all',
                      't': 'material_track', 'a': 'turntable', 's': 'stacked'}
             mode = modes.get(chr(key).lower()) if 0 <= key <= 255 else None
-            if mode is None or mode == self.active:
+            if mode is None or (mode == self.active and not getattr(self, 'pending_command', None)):
                 return
             command = 'material track %d' % self.track_color if mode == 'material_track' else mode
         # All keyboard commands use the same public gate as the external controller.
+        self.pending_command = command
+        self.request_time = time.monotonic()
         self.mode_command_pub.publish(String(data=command))
         self.get_logger().info('窗口按键命令: %s' % command)
 

@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from std_msgs.msg import String
 
 try:
@@ -68,6 +69,8 @@ class RingSerialBridgeNode(Node):
 
         mode_topic = str(self.get_parameter("mode_topic").value)
         self.mode_publisher = self.create_publisher(String, mode_topic, 10)
+        retained = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(String, '/vision/active_mode', self._active_mode_callback, retained)
         self.create_subscription(
             String, str(self.get_parameter("ring_result_topic").value),
             self._ring_result_callback, 1)
@@ -188,6 +191,24 @@ class RingSerialBridgeNode(Node):
             self.latest_ring_frame = encode_identified_ring_result([])
             self.latest_ring_time = None
             self.ring_pending = False
+
+    def _active_mode_callback(self, message: String) -> None:
+        mode = message.data.strip()
+        if mode not in ('raw', 'ring', 'turntable', 'stacked', 'material_all', 'material_track'):
+            return
+        if self.active_mode == mode:
+            return
+        # Follow the gate's executed mode, including keyboard requests. A
+        # received serial request alone is not proof a detector is running.
+        self.active_mode = mode
+        self.tx_reported = False
+        self.latest_ring_frame = encode_identified_ring_result([])
+        self.latest_ring_time = None
+        self.ring_pending = False
+        self.last_ring_source_ns = 0
+        self.ring_mode_since_ns = int(time.monotonic() * 1e9)
+        self.latest_turntable_center = None
+        self.get_logger().info('门控确认执行模式: %s' % mode)
 
     def _turntable_result_callback(self, message: String) -> None:
         if self.active_mode != "turntable":

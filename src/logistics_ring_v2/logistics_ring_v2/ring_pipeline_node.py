@@ -67,8 +67,8 @@ class RingPipelineNode(Node):
             self.create_timer(0.03, self._show)
         if self.running:
             self.worker.start()
-        self.get_logger().info('圆环backend=%s，OpenCV线程=%d。' %
-                               (self.pipeline.detector_backend,threads))
+        self.get_logger().info('圆环backend=%s，OpenCV线程=%d，源码=%s。' %
+                               (self.pipeline.detector_backend,threads,__file__))
 
     def _image(self, message):
         ingress_ns = time.monotonic_ns()
@@ -80,10 +80,14 @@ class RingPipelineNode(Node):
         if command == 'run' and not self.running:
             self.worker.start()
             self.running = True
+            self.get_logger().info('收到圆环run，开始处理相机图像。')
         elif command == 'stop':
+            was_running = self.running
             self.running = False
             self.worker.stop()
             self.preview = None
+            if was_running:
+                self.get_logger().info('收到圆环stop，已停止处理。')
         elif command != 'run':
             self.get_logger().warning('圆环命令只支持run/stop: %s' % message.data)
 
